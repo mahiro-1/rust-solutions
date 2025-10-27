@@ -1,7 +1,7 @@
 use clap::{App, Arg};
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Read};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -69,7 +69,7 @@ pub fn get_args() -> MyResult<Config> {
         .value_of("bytes")
         .map(parse_positive_int)
         .transpose()
-        .map_err(|e| format!("illegal line count -- {}", e))?;
+        .map_err(|e| format!("illegal byte count -- {}", e))?;
 
     Ok(Config {
         files: matches.values_of_lossy("files").unwrap(),
@@ -79,11 +79,33 @@ pub fn get_args() -> MyResult<Config> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    for filename in config.files {
+    let num_files = config.files.len();
+    for (file_num, filename) in config.files.iter().enumerate() {
         match open(&filename) {
             Err(err) => eprintln!("{}: {}", filename, err),
-            Ok(_) => println!("Opened {}", filename),
-        }
+            Ok(mut file) => {
+                if num_files > 1 {
+                    println!("{}==> {} <==", if file_num > 0 {"\n"} else {""}, filename);
+                }
+                if let Some(num_bytes) = config.bytes {
+                    let mut handle = file.take(num_bytes as u64); //指定したバイト数を読み込む、返すのはファイルハンドラ
+                    let mut buffer = vec![0; num_bytes]; //0で初期化した長さnum_bytesのバッファーを用意する
+                    let bytes_read = handle.read(&mut buffer)?; //引数にはポインタを渡して代入してもらう。返り値は実際に読み込めたバイト数
+                    print!("{}", String::from_utf8_lossy(&buffer[..bytes_read])); //実際に読み込まれたバイト数分だけ文字列に変換して書き出す
+                }
+                else {
+                    let mut line = String::new();
+                    for _ in 0..config.lines {
+                        let bytes = file.read_line(&mut line)?;
+                        if bytes == 0 {
+                            break;
+                        }
+                        print!("{}", line);
+                        line.clear();
+                    }
+                }
+            }
+        };
     }
     Ok(())
 }
