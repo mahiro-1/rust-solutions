@@ -14,3 +14,6 @@ $ wc test.txt
 - -m バイト数の代わりに文字数を表示する
 
 複数ファイル・標準入力を読み込むと、それぞれの列挙と共に最後に合計を出力する（Ctrl+Dで標準入力終了）
+
+## おすすめ参考URL
+- https://runebook.dev/ja/docs/rust/std/io/trait.bufread

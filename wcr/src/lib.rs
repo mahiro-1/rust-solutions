@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use std::error::Error;
+use std::{error::Error, fs::File, io::{self, BufRead, BufReader}};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -10,6 +10,49 @@ pub struct Config {
     words: bool,
     bytes: bool,
     chars: bool,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct FileInfo {
+    num_lines: usize,
+    num_words: usize,
+    num_bytes: usize,
+    num_chars: usize,
+}
+pub fn run(config: Config) -> MyResult<()> {
+    for filename in &config.files {
+        match open(filename) {
+            Err(err) => eprintln!("{}: {}", filename, err),
+            Ok(_) => println!("Opened {}", filename)
+        }
+    }
+    Ok(())
+}
+
+pub fn count(mut file: impl BufRead) -> MyResult<FileInfo> { //BufReadトレイトを実装している引数を取る
+    let mut num_lines = 0; //read_lineしてOk(o)を返すまでループして、そのループ数が行数
+    let mut num_words = 0; //これが一番だるい、スペースやタブ、改行などで区切られた文字をカウントする。複数スペースやタブとスペース連続なども考えなきゃならん -> .split_whitespace()で解決かも
+    let mut num_bytes = 0; //read_lineの返り値がその行のバイト数だからそれを足すだけ
+    let mut num_chars = 0; //これもだるい、一つ一つの文字を読み取ってカウントしていく...
+                    let mut line = String::new();
+                    for _ in 0..config.lines {
+                        let bytes = file.read_line(&mut line)?;
+                        if bytes == 0 {
+                            break;
+                        }
+                        print!("{}", line);
+                        line.clear();
+                    }
+                }
+            }
+        };
+
+    Ok(FileInfo { 
+        num_lines,
+        num_words,
+        num_bytes,
+        num_chars,
+    })
 }
 
 pub fn get_args() -> MyResult<Config> {
@@ -51,5 +94,50 @@ pub fn get_args() -> MyResult<Config> {
                 .long("chars")
                 .help("Show character count")
                 .takes_value(false)
+                .conflicts_with("bytes")
         )
+        .get_matches();
+    let mut lines = matches.is_present("lines");
+    let mut words =  matches.is_present("words");
+    let mut bytes = matches.is_present("bytes");
+    let chars = matches.is_present("chars");
+    if [lines, words, bytes, chars].iter().all(|v| v == &false){
+        lines = true;
+        words = true;
+        bytes = true;
+    }
+    Ok(Config {
+        files: matches.values_of_lossy("files").unwrap(),
+        lines,
+        words,
+        bytes,
+        chars
+    })
+}
+
+fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
+    match filename {
+        "-" => Ok(Box::new(BufReader::new(io::stdin()))),
+        _ => Ok(Box::new(BufReader::new(File::open(filename)?))),
+    }
+}
+
+#[cfg(test)] //テストの時だけコンパイルされる
+mod tests {
+    use super::{count, FileInfo};
+    use std::io::Cursor;
+
+    #[test]
+    fn test_count() {
+        let text = "I don't want the world. Ijustwant your half.\r\n";
+        let info = count(Cursor::new(text));
+        assert!(info.is_ok());
+        let expected = FileInfo {
+            num_lines: 1,
+            num_words: 10,
+            num_chars: 48,
+            num_bytes: 48,
+        };
+        assert_eq!(info.unwrap(), expected);
+    }
 }
